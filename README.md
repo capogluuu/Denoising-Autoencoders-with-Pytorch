@@ -6,6 +6,5 @@ As we know, the photos we take from cameras are sometimes not suitable for proce
 
 
 <p align="center">
-  <img width="460" height="300" src="image/image1.PNG">
+  <img width="893" height="331" src="image/image1.PNG">
 </p>
-![Noisy picture and clear picture]()
