@@ -167,3 +167,64 @@ test_loader  = torch.utils.data.DataLoader(test_set,
                                            batch_size=batch_size, 
                                            shuffle=False)
 
+class Autoencoder(nn.Module):
+    def __init__(self):
+        super(Autoencoder, self).__init__()
+        self.encoder = nn.Sequential( # like the Composition layer you built
+            nn.Conv2d(1, 16, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 7)
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(64, 32, 7),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, 3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 1, 3, stride=2, padding=1, output_padding=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+def train(model, num_epochs=5, batch_size=64, learning_rate=1e-3):
+    torch.manual_seed(42)
+    criterion = nn.MSELoss() # mean square error loss
+    optimizer = torch.optim.Adam(model.parameters(),
+                                 lr=learning_rate, 
+                                 weight_decay=1e-5) # <--
+    
+    outputs = []
+    for epoch in range(num_epochs):
+        for data in train_loader:
+            img, _ = data
+            recon = model(img)
+            loss = criterion(recon, img)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+        print('Epoch:{}, Loss:{:.4f}'.format(epoch+1, float(loss)))
+        outputs.append((epoch, img, recon),)
+    return outputs
+model = Autoencoder()
+#device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#aemodel = model.to(device)
+#print(aemodel)
+max_epochs = 20
+outputs = train(model, num_epochs=max_epochs)
+
+f, axarr = plt.subplots(1,2, figsize=(50,100))
+imgs  = outputs[4][1].detach().numpy()
+recon = outputs[4][2].detach().numpy()
+
+imgs = torch.from_numpy(imgs)
+recon= torch.from_numpy(recon)
+
+
+axarr[0].imshow(imgs[0].permute(1,2,0))
+axarr[1].imshow(recon[0].permute(1,2,0))
