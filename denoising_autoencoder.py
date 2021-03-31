@@ -141,8 +141,7 @@ train_test_x train_test_y
 train_set_x  train_set_y
 test_set_x 
 """
-
-batch_size = 5
+batch_size = 2
 
 from torch.utils.data import Dataset
 
@@ -156,75 +155,112 @@ class Dataset96(Dataset):
     
     def __getitem__(self, idx):
         return self.X_train[idx], self.y_train[idx]
-
 training_set = Dataset96(train_set_x, train_set_y)
 train_loader = torch.utils.data.DataLoader(training_set,
                                            batch_size=batch_size, 
-                                           shuffle=False)
+                                           shuffle=True)
 
 test_set = Dataset96(train_test_x, train_test_y)
 test_loader  = torch.utils.data.DataLoader(test_set, 
                                            batch_size=batch_size, 
-                                           shuffle=False)
+                                           shuffle=True)
+import torch.nn.functional as F
 
 class Autoencoder(nn.Module):
     def __init__(self):
         super(Autoencoder, self).__init__()
-        self.encoder = nn.Sequential( # like the Composition layer you built
-            nn.Conv2d(1, 16, 3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 32, 3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, 7)
-        )
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(64, 32, 7),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, 3, stride=2, padding=1, output_padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 1, 3, stride=2, padding=1, output_padding=1),
-            nn.Sigmoid()
-        )
-
+        # encoder layers
+        self.enc1 = nn.Conv2d(1, 512, kernel_size=3, padding=1)
+        self.enc2 = nn.Conv2d(512, 256, kernel_size=3, padding=1)
+        self.enc3 = nn.Conv2d(256, 128, kernel_size=3, padding=1)
+        self.enc4 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        
+        # decoder layers
+        self.dec1 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2)  
+        self.dec2 = nn.ConvTranspose2d(64, 128, kernel_size=2, stride=2)
+        self.dec3 = nn.ConvTranspose2d(128, 256, kernel_size=2, stride=2)
+        self.dec4 = nn.ConvTranspose2d(256, 512, kernel_size=2, stride=2)
+        self.out = nn.Conv2d(512, 1, kernel_size=3, padding=1)
+        
+        self.bn1 = nn.BatchNorm2d(512)
+        self.bn2 = nn.BatchNorm2d(256)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.bn4 = nn.BatchNorm2d(64)        
+        self.pool = nn.MaxPool2d(2, 2)
     def forward(self, x):
-        x = self.encoder(x)
-        x = self.decoder(x)
+        # encode
+        x = F.relu(self.enc1(x))
+        x = self.bn1(x)
+        x = self.pool(x)
+        x = F.relu(self.enc2(x))
+        x = self.bn2(x)
+        x = self.pool(x)
+        x = F.relu(self.enc3(x))
+        x = self.bn3(x)
+        x = self.pool(x)
+        x = F.relu(self.enc4(x))
+        x = self.bn4(x)
+        x = self.pool(x) # the latent space representation
+        
+        # decode
+        x = F.relu(self.dec1(x))
+        x = (self.bn4(x))
+        x = F.relu(self.dec2(x))
+        x = (self.bn3(x))
+        x = F.relu(self.dec3(x))
+        x = (self.bn2(x))
+        x = F.relu(self.dec4(x))
+        x = (self.bn1(x))
+        x = torch.sigmoid(self.out(x))
         return x
-
-def train(model, num_epochs=5, batch_size=64, learning_rate=1e-3):
-    torch.manual_seed(42)
+def train(model, num_epochs=5, batch_size=2, learning_rate=0.01):
     criterion = nn.MSELoss() # mean square error loss
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=learning_rate, 
-                                 weight_decay=1e-5) # <--
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
     
     outputs = []
+
     for epoch in range(num_epochs):
         for data in train_loader:
             img, _ = data
+            
+            #print(_)
+            img, _ = img.cuda(), _.cuda()
+
+            optimizer.zero_grad()
             recon = model(img)
-            loss = criterion(recon, img)
+            #print(recon.shape)
+            loss = criterion(recon, _)
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
-
+            
+            
         print('Epoch:{}, Loss:{:.4f}'.format(epoch+1, float(loss)))
         outputs.append((epoch, img, recon),)
     return outputs
+
+def get_device():
+    if torch.cuda.is_available():
+        device = 'cuda:0'
+    else:
+        device = 'cpu'
+    return device
+
 model = Autoencoder()
-#device = 'cuda' if torch.cuda.is_available() else 'cpu'
-#aemodel = model.to(device)
-#print(aemodel)
-max_epochs = 20
-outputs = train(model, num_epochs=max_epochs)
+device = get_device()
+print(device)
+model.to(device)
 
-f, axarr = plt.subplots(1,2, figsize=(50,100))
-imgs  = outputs[4][1].detach().numpy()
-recon = outputs[4][2].detach().numpy()
+outputs = train(model, num_epochs=20)
 
-imgs = torch.from_numpy(imgs)
-recon= torch.from_numpy(recon)
+recon = outputs[1][2].detach().cpu().numpy()
+for i in recon:
+    print(i.shape)
+    #i = i.reshape(-1,540)
+    print(i)
+    i =  torch.from_numpy(i)
+    #lum_img = img[:, :, 0]
+    print(type(i))
+    plt.imshow(i.permute(1,2,0),cmap = "gray")
+    break
 
-
-axarr[0].imshow(imgs[0].permute(1,2,0))
-axarr[1].imshow(recon[0].permute(1,2,0))
