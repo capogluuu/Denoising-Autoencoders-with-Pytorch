@@ -7,6 +7,6 @@ As we know, the photos we take from cameras are sometimes not suitable for proce
 <p align="center"><img width="893" height="331" src="image/image1.PNG"></p>
 
 <h3 align="center">RESULT</h1>
-<p align="center"><img width="483" height="468" src="image/indir.PNG"></p>
+<p align="center"><img width="483" height="468" src="image/indir.png"></p>
 
 
